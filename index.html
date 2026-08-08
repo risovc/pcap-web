@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PCAP Flow Analyzer | Deep Network & TCP Stream Diagnostics</title>
+  <link rel="stylesheet" href="/styles.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+</head>
+<body class="dark-theme">
+  <!-- Top Navigation Header -->
+  <header class="app-header">
+    <div class="header-left">
+      <div class="logo-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242M12 12v9m-4-4 4 4 4-4"/>
+        </svg>
+      </div>
+      <div class="brand-text">
+        <h1>PCAP Flow Analyzer</h1>
+        <span class="badge badge-primary">TCP Stream Intelligence & Diagnostics</span>
+      </div>
+    </div>
+
+    <div class="header-center">
+      <div class="active-file-pill" id="activeFilePill">
+        <span class="pulse-dot"></span>
+        <span class="file-label">Active:</span>
+        <strong id="activeFileName">Loading...</strong>
+        <span class="file-stats" id="activeFileStats"></span>
+      </div>
+    </div>
+
+    <div class="header-right">
+      <!-- Preloaded Samples Dropdown -->
+      <div class="sample-picker-container">
+        <label for="sampleSelect" class="sr-only">Preloaded Sample</label>
+        <select id="sampleSelect" class="select-control">
+          <option value="" disabled selected>⚡ Load Sample PCAP...</option>
+          <option value="normal_web">🟢 Healthy Web Flow (100% Health)</option>
+          <option value="packet_loss">🔴 Packet Loss & Retransmission Storm</option>
+          <option value="zero_window">🟡 Zero-Window Receiver Freeze</option>
+          <option value="rst_abort">🟣 TCP RST Abort & Refused Port</option>
+        </select>
+      </div>
+
+      <button id="btnExportReport" class="btn btn-outline" title="Export JSON Analysis Report">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/>
+        </svg>
+        <span>Export Report</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- Main Application Container -->
+  <main class="app-main">
+    <!-- Top Row: Upload & IP Filter Bar -->
+    <section class="card config-card">
+      <div class="config-grid">
+        <!-- Dropzone / Upload Box -->
+        <div class="upload-zone" id="dropZone">
+          <input type="file" id="fileInput" accept=".pcap,.pcapng,.cap" class="file-input-hidden">
+          <div class="upload-content">
+            <svg class="upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/>
+            </svg>
+            <div class="upload-text">
+              <strong>Click to upload</strong> or drag & drop PCAP / PCAPNG
+              <span class="upload-hint">Supports classic PCAP, PCAPNG, Ethernet, VLAN, IPv4, IPv6, TCP, UDP</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- IP & Port Configuration Form -->
+        <div class="filter-form">
+          <div class="form-row-header">
+            <span class="section-title">Define Client & Server Flow Endpoints</span>
+            <span class="hint-text">Auto-detected from trace or enter manually</span>
+          </div>
+
+          <div class="ip-inputs-row">
+            <div class="input-group">
+              <label for="inputClientIp">Client IP</label>
+              <input type="text" id="inputClientIp" placeholder="e.g. 192.168.1.100" class="input-control font-mono">
+            </div>
+
+            <div class="input-group input-group-sm">
+              <label for="inputClientPort">Client Port</label>
+              <input type="number" id="inputClientPort" placeholder="Any" class="input-control font-mono">
+            </div>
+
+            <button id="btnSwapIps" class="btn btn-icon btn-secondary" title="Swap Client and Server">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="m16 3 4 4-4 4M20 7H4M8 21l-4-4 4-4M4 17h16"/>
+              </svg>
+            </button>
+
+            <div class="input-group">
+              <label for="inputServerIp">Server IP</label>
+              <input type="text" id="inputServerIp" placeholder="e.g. 10.0.0.50" class="input-control font-mono">
+            </div>
+
+            <div class="input-group input-group-sm">
+              <label for="inputServerPort">Server Port</label>
+              <input type="number" id="inputServerPort" placeholder="Any" class="input-control font-mono">
+            </div>
+
+            <button id="btnRunAnalysis" class="btn btn-primary btn-analyze">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                <polygon points="5 3 19 12 5 21 5 3"/>
+              </svg>
+              <span>Analyze Flow</span>
+            </button>
+          </div>
+
+          <!-- Discovered Conversation Quick-Pills -->
+          <div class="conversations-quickbar">
+            <span class="quickbar-label">Discovered Conversations:</span>
+            <div class="conversation-pills" id="conversationPillsContainer">
+              <span class="loading-shimmer">Scanning packet conversations...</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Executive Health & Diagnostics Overview -->
+    <section class="card diagnostics-card" id="diagnosticsSection">
+      <div class="diagnostics-header">
+        <div class="diag-title-group">
+          <h2>Executive Health & Diagnostics Summary</h2>
+          <span class="subtitle" id="analysisScopeSubtitle">All matching TCP flows</span>
+        </div>
+        <div class="overall-health-badge" id="overallHealthBadge">
+          <span class="health-indicator-circle"></span>
+          <span id="overallHealthStatusText">HEALTHY</span>
+        </div>
+      </div>
+
+      <div class="metrics-dashboard-grid">
+        <!-- Health Score Ring Card -->
+        <div class="metric-box health-gauge-box">
+          <div class="gauge-container">
+            <svg viewBox="0 0 100 100" class="health-circle-svg">
+              <circle class="gauge-bg" cx="50" cy="50" r="42" stroke-width="10"/>
+              <circle class="gauge-progress" id="gaugeProgressCircle" cx="50" cy="50" r="42" stroke-width="10" stroke-dasharray="263.89" stroke-dashoffset="0"/>
+            </svg>
+            <div class="gauge-label">
+              <span class="gauge-number" id="healthScoreNumber">100</span>
+              <span class="gauge-caption">HEALTH SCORE</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Metric Card: Retransmissions -->
+        <div class="metric-box" id="metricCardRetrans">
+          <div class="metric-header">
+            <span class="metric-title">Retransmissions & Loss</span>
+            <span class="metric-icon retrans-icon">⚠️</span>
+          </div>
+          <div class="metric-value-row">
+            <span class="metric-value" id="valRetransmissions">0</span>
+            <span class="metric-unit" id="valRetransRate">(0.0%)</span>
+          </div>
+          <div class="metric-footer" id="footRetransDetail">No packet loss detected</div>
+        </div>
+
+        <!-- Metric Card: Duplicate ACKs -->
+        <div class="metric-box" id="metricCardDupAcks">
+          <div class="metric-header">
+            <span class="metric-title">Duplicate ACKs</span>
+            <span class="metric-icon dupack-icon">🔁</span>
+          </div>
+          <div class="metric-value-row">
+            <span class="metric-value" id="valDupAcks">0</span>
+            <span class="metric-unit">events</span>
+          </div>
+          <div class="metric-footer" id="footDupAcksDetail">Smooth sequence progression</div>
+        </div>
+
+        <!-- Metric Card: Zero Window Stalls -->
+        <div class="metric-box" id="metricCardZeroWin">
+          <div class="metric-header">
+            <span class="metric-title">Zero-Window Stalls</span>
+            <span class="metric-icon stall-icon">❄️</span>
+          </div>
+          <div class="metric-value-row">
+            <span class="metric-value" id="valZeroWindows">0</span>
+            <span class="metric-unit" id="valZeroWinStall">(0ms)</span>
+          </div>
+          <div class="metric-footer" id="footZeroWinDetail">Healthy receiver buffer</div>
+        </div>
+
+        <!-- Metric Card: RST & Resets -->
+        <div class="metric-box" id="metricCardRst">
+          <div class="metric-header">
+            <span class="metric-title">Connection Resets (RST)</span>
+            <span class="metric-icon rst-icon">⚡</span>
+          </div>
+          <div class="metric-value-row">
+            <span class="metric-value" id="valRstCount">0</span>
+            <span class="metric-unit">resets</span>
+          </div>
+          <div class="metric-footer" id="footRstDetail">Clean graceful closures</div>
+        </div>
+
+        <!-- Metric Card: Latency / RTT -->
+        <div class="metric-box" id="metricCardRtt">
+          <div class="metric-header">
+            <span class="metric-title">Round Trip Time (RTT)</span>
+            <span class="metric-icon rtt-icon">⏱️</span>
+          </div>
+          <div class="metric-value-row">
+            <span class="metric-value" id="valAvgRtt">--</span>
+            <span class="metric-unit">ms avg</span>
+          </div>
+          <div class="metric-footer" id="footRttDetail">Max RTT: -- ms</div>
+        </div>
+      </div>
+
+      <!-- Root-Cause Diagnosis & Remediation Box -->
+      <div class="recommendations-box" id="recommendationsBox">
+        <div class="rec-header">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"/>
+            <line x1="12" y1="16" x2="12" y2="12"/>
+            <line x1="12" y1="8" x2="12.01" y2="8"/>
+          </svg>
+          <strong>Diagnostic Insights & Root-Cause Recommendations</strong>
+        </div>
+        <ul class="rec-list" id="recommendationsList">
+          <li>Analyzing packet trace...</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- TCP Streams Table Section -->
+    <section class="card streams-card">
+      <div class="card-header-row">
+        <div>
+          <h3>Associated TCP Streams</h3>
+          <span class="subtitle">Select a stream below to inspect its sequence flow ladder and metric timelines</span>
+        </div>
+        <div class="streams-count-pill" id="streamsCountPill">0 Streams</div>
+      </div>
+
+      <div class="table-container">
+        <table class="data-table" id="streamsTable">
+          <thead>
+            <tr>
+              <th>Stream ID</th>
+              <th>Client Endpoint</th>
+              <th>Direction</th>
+              <th>Server Endpoint</th>
+              <th>Packets</th>
+              <th>Payload Bytes</th>
+              <th>Duration</th>
+              <th>iRTT</th>
+              <th>Retrans</th>
+              <th>Stalls</th>
+              <th>Status & Health</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody id="streamsTableBody">
+            <tr>
+              <td colspan="12" class="text-center py-4">No streams analyzed yet. Click "Analyze Flow" above.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Detailed Stream Inspection & Flow Sequence Section -->
+    <section class="stream-detail-layout" id="streamDetailLayout">
+      <!-- Left / Center: Interactive SVG Packet Flow Ladder (Sequence Diagram) -->
+      <div class="card ladder-card">
+        <div class="ladder-header">
+          <div class="ladder-title-group">
+            <h3>Packet Flow Ladder (Sequence Diagram)</h3>
+            <span class="subtitle" id="ladderStreamSubtitle">Stream #0 • 192.168.1.100:52140 ↔ 10.0.0.50:80</span>
+          </div>
+
+          <div class="ladder-controls">
+            <!-- Filter: All vs Anomalies Only -->
+            <div class="toggle-group">
+              <button class="toggle-btn active" id="btnFilterAllPkts">All Packets</button>
+              <button class="toggle-btn" id="btnFilterAnomalies">⚠️ Anomalies Only</button>
+            </div>
+
+            <!-- Legend Info Pill -->
+            <div class="ladder-legend">
+              <span class="legend-item"><span class="legend-color legend-green"></span> Handshake/FIN</span>
+              <span class="legend-item"><span class="legend-color legend-blue"></span> Data/ACK</span>
+              <span class="legend-item"><span class="legend-color legend-amber"></span> Zero Win</span>
+              <span class="legend-item"><span class="legend-color legend-red"></span> Retrans / RST</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- SVG Sequence Diagram Canvas Container -->
+        <div class="ladder-viewport" id="ladderViewport">
+          <svg id="ladderSvg" class="ladder-svg" width="100%" height="600">
+            <!-- Dynamic SVG elements generated by app.js -->
+          </svg>
+        </div>
+      </div>
+
+      <!-- Right Column: Performance Metric Charts -->
+      <div class="charts-column">
+        <!-- RTT Timeline Card -->
+        <div class="card chart-card">
+          <div class="chart-header">
+            <h4>Round Trip Time (RTT) Progression</h4>
+            <span class="chart-tag">ms over time</span>
+          </div>
+          <div class="chart-canvas-container">
+            <canvas id="rttChartCanvas"></canvas>
+          </div>
+        </div>
+
+        <!-- Window Size Card -->
+        <div class="card chart-card">
+          <div class="chart-header">
+            <h4>TCP Window Size Progression</h4>
+            <span class="chart-tag">Bytes advertised</span>
+          </div>
+          <div class="chart-canvas-container">
+            <canvas id="windowChartCanvas"></canvas>
+          </div>
+        </div>
+
+        <!-- Throughput Card -->
+        <div class="card chart-card">
+          <div class="chart-header">
+            <h4>Flow Throughput Rate</h4>
+            <span class="chart-tag">KB/s over time</span>
+          </div>
+          <div class="chart-canvas-container">
+            <canvas id="throughputChartCanvas"></canvas>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Deep Packet Inspector Modal / Drawer -->
+  <div class="modal-backdrop" id="packetModalBackdrop">
+    <div class="modal-drawer" id="packetModalDrawer">
+      <div class="modal-header">
+        <div class="modal-title-group">
+          <h3 id="modalPacketTitle">Packet #1 Inspector</h3>
+          <span class="modal-subtitle" id="modalPacketSubtitle">TCP Segment Detail & Raw Hex</span>
+        </div>
+        <button class="modal-close-btn" id="btnModalClose">&times;</button>
+      </div>
+
+      <div class="modal-body">
+        <!-- Protocol Decode Accordions -->
+        <div class="proto-tree">
+          <!-- Frame / General -->
+          <div class="proto-section">
+            <div class="proto-section-header">📦 Frame & Timing Metadata</div>
+            <div class="proto-section-content" id="modalFrameContent">
+              <!-- Filled dynamically -->
+            </div>
+          </div>
+
+          <!-- Ethernet Header -->
+          <div class="proto-section">
+            <div class="proto-section-header">🌐 Layer 2: Ethernet Frame</div>
+            <div class="proto-section-content" id="modalEthContent">
+              <!-- Filled dynamically -->
+            </div>
+          </div>
+
+          <!-- IP Header -->
+          <div class="proto-section">
+            <div class="proto-section-header">📡 Layer 3: Internet Protocol (IP)</div>
+            <div class="proto-section-content" id="modalIpContent">
+              <!-- Filled dynamically -->
+            </div>
+          </div>
+
+          <!-- TCP Header -->
+          <div class="proto-section">
+            <div class="proto-section-header">⚡ Layer 4: Transmission Control Protocol (TCP)</div>
+            <div class="proto-section-content" id="modalTcpContent">
+              <!-- Filled dynamically -->
+            </div>
+          </div>
+        </div>
+
+        <!-- Hex & ASCII Dump View -->
+        <div class="hexdump-section">
+          <div class="hexdump-header">
+            <span>Raw Packet Payload & Hex Dump</span>
+            <button class="btn btn-xs btn-outline" id="btnCopyHex">Copy Hex</button>
+          </div>
+          <pre class="hexdump-viewer font-mono" id="modalHexDumpViewer"></pre>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="/app.js"></script>
+</body>
+</html>
